@@ -1,6 +1,5 @@
 import sys;
 
-max = int(sys.argv[1]);
 primos = [];
 
 arq = open("primos.txt", 'r');
@@ -10,6 +9,8 @@ for linha in arq:
 
 print(len(primos));
 arq = open("primos.txt", 'w');
+
+max = int(primos[-1] * 1.1);
 
 for i in primos:
   arq.write(str(i) + "\n");
