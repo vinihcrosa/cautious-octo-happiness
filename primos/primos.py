@@ -1,4 +1,5 @@
 import sys;
+import math;
 
 primos = [];
 
@@ -17,15 +18,17 @@ for i in primos:
 
 def ePrimo(n):
     for i in primos:
-      if i > n/2:
+      if i > math.sqrt(n):
         break;
       if n % i == 0:
         return False;
     return True;
 
 def printPerCent(n, max):
-  print("\r", '{0:.3g}'.format((n/max)*100), "%", end="");
-  sys.stdout.flush();
+  percent = (n/max)*100;
+  if(percent % 1 <= 0.01):
+    print("\r", '{0:.3g}'.format((n/max)*100), "%", end="");
+    sys.stdout.flush();
 
 min = primos[-1]
 for i in range(min, max):
