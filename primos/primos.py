@@ -1,5 +1,7 @@
 import sys;
 import math;
+from threading import Thread
+
 
 primos = [];
 
@@ -8,7 +10,8 @@ arq = open("primos.txt", 'r');
 for linha in arq:
   primos.append(int(linha));
 
-print(len(primos));
+initLen = len(primos);
+print(initLen);
 arq = open("primos.txt", 'w');
 
 max = int(primos[-1] * 1.1);
@@ -30,12 +33,18 @@ def printPerCent(n, max):
     print("\r", '{0:.3g}'.format((n/max)*100), "%", end="");
     sys.stdout.flush();
 
-min = primos[-1]
-for i in range(min, max):
+def main(min, max):
   printPerCent(i - min, max - min)
   if(ePrimo(i)):
     primos.append(i);
     arq.write(str(i) + "\n");
 
+min = primos[-1]
+for i in range(min, max):
+  main(min, max)
+
 print('/n')
-print(len(primos));
+endLen = len(primos);
+print(endLen);
+print(endLen - initLen);
+
