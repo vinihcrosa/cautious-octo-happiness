@@ -1,7 +1,12 @@
 import sys;
 import math;
 from threading import Thread
+import time
+import timeit
 
+inicio = timeit.default_timer()
+anterior = timeit.default_timer()
+print("anterio -> ", anterior)
 
 primos = [];
 
@@ -11,13 +16,18 @@ for linha in arq:
   primos.append(int(linha));
 
 initLen = len(primos);
-print(initLen);
-arq = open("primos.txt", 'w');
+print("Quantidade de primos no inicio -> ", initLen);
+print("Inicio do calculo de primos -> ", primos[-1])
+arq = open("primos.txt", 'a');
 
-max = int(primos[-1] * 1.1);
+max = int(primos[-1] * 2);
 
-for i in primos:
-  arq.write(str(i) + "\n");
+def formataTempo(segundos):
+  horas = segundos // 3600;
+  segundos = segundos % 3600;
+  minutos = segundos // 60;
+  segundos = segundos % 60;
+  return "{0:.3g}".format(horas) + "h " + "{0:.3g}".format(minutos) + "m " + "{0:.3g}".format(segundos) + "s";
 
 def ePrimo(n):
     for i in primos:
@@ -29,9 +39,12 @@ def ePrimo(n):
 
 def printPerCent(n, max):
   percent = (n/max)*100;
-  if(percent % 1 <= 0.01):
-    print("\r", '{0:.3g}'.format((n/max)*100), "%", end="");
+  agora = timeit.default_timer()
+  print("anterio -> ", anterior)
+  if(abs(agora - anterior) > 1):
+    print("\r", '{0:.3g}'.format(percent), "%", "em -> ", formataTempo(agora - inicio), "seg           ",end="");
     sys.stdout.flush();
+    anterior = agora;
 
 def main(min, max):
   printPerCent(i - min, max - min)
@@ -45,6 +58,6 @@ for i in range(min, max):
 
 print('/n')
 endLen = len(primos);
-print(endLen);
-print(endLen - initLen);
+print("ultimo primo achado -> ", primos[-1]);
+print("quantidade de primos calculados -> ", endLen - initLen);
 
