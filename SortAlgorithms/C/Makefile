@@ -1,4 +1,4 @@
-CFLAGS = -g -Wall -std=c99 -pedantic
+CFLAGS = -g -Wall -std=c99 -pedantic -fopenmp
 
 all: main
 
