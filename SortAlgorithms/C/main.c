@@ -16,6 +16,7 @@ typedef struct
 static double diffSeconds(struct timespec end, struct timespec start);
 static double benchmarkSort(FILE *baseFile, int tam, long long offsetBytes, void (*sortFunction)(int *, int), int printResult);
 static const SortAlgorithmEntry *findSortAlgorithm(const char *name);
+static void printHelp(const char *programName);
 
 static const SortAlgorithmEntry SORT_ALGORITHMS[] = {
     {"bubbleSort", bubbleSort},
@@ -29,9 +30,16 @@ static const size_t SORT_ALGORITHMS_COUNT = sizeof(SORT_ALGORITHMS) / sizeof(SOR
 
 int main(int argc, char *argv[])
 {
+  if (argc >= 2 && (strcmp(argv[1], "-h") == 0 || strcmp(argv[1], "--help") == 0))
+  {
+    printHelp(argv[0]);
+    return 0;
+  }
+
   if (argc < 4)
   {
     printf("Uso: %s <tamanho_array> <qtd_amostras> <algoritmo_1> [algoritmo_2 ... algoritmo_n]\n", argv[0]);
+    printf("Use -h para mais detalhes.\n");
     return 1;
   }
 
@@ -269,4 +277,26 @@ static double diffSeconds(struct timespec end, struct timespec start)
   double seconds = (double)(end.tv_sec - start.tv_sec);
   long nanosecDelta = end.tv_nsec - start.tv_nsec;
   return seconds + (double)nanosecDelta / 1e9;
+}
+
+static void printHelp(const char *programName)
+{
+  printf("Uso: %s <tamanho_array> <qtd_amostras> <algoritmo_1> [algoritmo_2 ... algoritmo_n]\n", programName);
+  printf("\nDescricao:\n");
+  printf("  Gera <qtd_amostras> vetores aleatorios de <tamanho_array> elementos, executa cada\n");
+  printf("  algoritmo solicitado sobre todas as amostras reutilizando dados armazenados em um\n");
+  printf("  arquivo temporario, e reporta o tempo medio de execucao.\n");
+  printf("\nParametros:\n");
+  printf("  <tamanho_array>   Quantidade de inteiros em cada amostra (>= 1).\n");
+  printf("  <qtd_amostras>    Numero de amostras independentes usadas para calcular a media.\n");
+  printf("  <algoritmo_i>     Nome de um ou mais algoritmos dentre:\n");
+  for (size_t i = 0; i < SORT_ALGORITHMS_COUNT; i++)
+  {
+    printf("                    - %s\n", SORT_ALGORITHMS[i].name);
+  }
+  printf("\nObservacoes:\n");
+  printf("  - Utilize -h ou --help para exibir esta mensagem.\n");
+  printf("  - Valores invalidos ou algoritmos desconhecidos sao ignorados com aviso.\n");
+  printf("  - Para entradas pequenas, os valores iniciais e o primeiro resultado ordenado\n");
+  printf("    sao impressos para facilitar a verificacao manual.\n");
 }
