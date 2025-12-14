@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #ifdef _OPENMP
 #include <omp.h>
 #endif
@@ -19,14 +20,18 @@ static inline void swapIntegers(int *a, int *b);
 static int medianOfThree(int arr[], int low, int high);
 static void mergeSortRecursive(int arr[], int temp[], int left, int right);
 static void merge(int arr[], int temp[], int left, int mid, int right);
-static void buildMaxHeap(int arr[], int n);
-static void buildMaxHeapRecursive(int arr[], int n, int index, int depth);
-static void heapify(int arr[], int n, int i);
+static void heapSortSequentialRange(int arr[], int start, int length);
+static void heapifyDownRange(int arr[], int start, int length, int root);
+static void parallelMergeSegments(int arr[], int temp[], const int offsets[], int segmentCount);
+static void mergeSegmentsRecursive(int *src, int *dst, const int offsets[], int leftSegment, int rightSegment);
+static void mergeSortedSubarrays(const int src[], int dst[], int leftStart, int leftEnd, int rightEnd);
 
 #define MERGE_SORT_PARALLEL_THRESHOLD 2048
-#define HEAP_BUILD_PARALLEL_DEPTH 4
 #define QUICK_SORT_PARALLEL_THRESHOLD 1024
 #define QUICK_SORT_INSERTION_THRESHOLD 32
+#define HEAP_MIN_CHUNK_SIZE 16384
+#define HEAP_MAX_SEGMENTS 64
+#define HEAP_MERGE_PARALLEL_THRESHOLD 32768
 
 void bubbleSort(int *arr, int n)
 {
@@ -220,106 +225,206 @@ static void merge(int arr[], int temp[], int left, int mid, int right)
     }
 }
 
+static void heapSortSequentialRange(int arr[], int start, int length)
+{
+    if (length <= 1)
+    {
+        return;
+    }
+    for (int i = (length / 2) - 1; i >= 0; --i)
+    {
+        heapifyDownRange(arr, start, length, i);
+    }
+    for (int end = length - 1; end > 0; --end)
+    {
+        swapIntegers(&arr[start], &arr[start + end]);
+        heapifyDownRange(arr, start, end, 0);
+    }
+}
+
+static void heapifyDownRange(int arr[], int start, int length, int root)
+{
+    int current = root;
+    while (1)
+    {
+        int left = 2 * current + 1;
+        int right = left + 1;
+        int largest = current;
+        if (left < length && arr[start + left] > arr[start + largest])
+        {
+            largest = left;
+        }
+        if (right < length && arr[start + right] > arr[start + largest])
+        {
+            largest = right;
+        }
+        if (largest == current)
+        {
+            break;
+        }
+        swapIntegers(&arr[start + current], &arr[start + largest]);
+        current = largest;
+    }
+}
+
+static void parallelMergeSegments(int arr[], int temp[], const int offsets[], int segmentCount)
+{
+    if (segmentCount <= 1)
+    {
+        return;
+    }
+    int totalLength = offsets[segmentCount];
+    memcpy(temp, arr, (size_t)totalLength * sizeof(int));
+#ifdef _OPENMP
+#pragma omp parallel
+    {
+#pragma omp single nowait
+        mergeSegmentsRecursive(temp, arr, offsets, 0, segmentCount);
+    }
+#else
+    mergeSegmentsRecursive(temp, arr, offsets, 0, segmentCount);
+#endif
+}
+
+static void mergeSegmentsRecursive(int *src, int *dst, const int offsets[], int leftSegment, int rightSegment)
+{
+    if ((rightSegment - leftSegment) <= 1)
+    {
+        int start = offsets[leftSegment];
+        int end = offsets[rightSegment];
+        if (start < end)
+        {
+            memcpy(dst + start, src + start, (size_t)(end - start) * sizeof(int));
+        }
+        return;
+    }
+    int mid = leftSegment + (rightSegment - leftSegment) / 2;
+#ifdef _OPENMP
+    int span = offsets[rightSegment] - offsets[leftSegment];
+    if (span >= HEAP_MERGE_PARALLEL_THRESHOLD)
+    {
+#pragma omp task shared(src, dst, offsets) firstprivate(leftSegment, mid)
+        mergeSegmentsRecursive(dst, src, offsets, leftSegment, mid);
+#pragma omp task shared(src, dst, offsets) firstprivate(mid, rightSegment)
+        mergeSegmentsRecursive(dst, src, offsets, mid, rightSegment);
+#pragma omp taskwait
+    }
+    else
+    {
+        mergeSegmentsRecursive(dst, src, offsets, leftSegment, mid);
+        mergeSegmentsRecursive(dst, src, offsets, mid, rightSegment);
+    }
+#else
+    mergeSegmentsRecursive(dst, src, offsets, leftSegment, mid);
+    mergeSegmentsRecursive(dst, src, offsets, mid, rightSegment);
+#endif
+    mergeSortedSubarrays(src, dst, offsets[leftSegment], offsets[mid], offsets[rightSegment]);
+}
+
+static void mergeSortedSubarrays(const int src[], int dst[], int leftStart, int leftEnd, int rightEnd)
+{
+    int i = leftStart;
+    int j = leftEnd;
+    int k = leftStart;
+    while (i < leftEnd && j < rightEnd)
+    {
+        if (src[i] <= src[j])
+        {
+            dst[k++] = src[i++];
+        }
+        else
+        {
+            dst[k++] = src[j++];
+        }
+    }
+    while (i < leftEnd)
+    {
+        dst[k++] = src[i++];
+    }
+    while (j < rightEnd)
+    {
+        dst[k++] = src[j++];
+    }
+}
+
 void heapSort(int arr[], int n)
 {
     if (n <= 1)
     {
         return;
     }
-    buildMaxHeap(arr, n);
-    for (int i = n - 1; i > 0; i--)
-    {
-        int temp = arr[0];
-        arr[0] = arr[i];
-        arr[i] = temp;
-        heapify(arr, i, 0);
-    }
-}
 
-static void buildMaxHeap(int arr[], int n)
-{
+    int estimatedSegments;
 #ifdef _OPENMP
-#pragma omp parallel
+    estimatedSegments = omp_get_max_threads();
+    if (estimatedSegments < 1)
     {
-#pragma omp single nowait
-        buildMaxHeapRecursive(arr, n, 0, 0);
+        estimatedSegments = 1;
     }
 #else
-    buildMaxHeapRecursive(arr, n, 0, 0);
+    estimatedSegments = 1;
 #endif
-}
 
-static void buildMaxHeapRecursive(int arr[], int n, int index, int depth)
-{
-    if (index >= n)
+    int maxSegmentsBySize = n / HEAP_MIN_CHUNK_SIZE;
+    if (maxSegmentsBySize == 0)
     {
+        maxSegmentsBySize = 1;
+    }
+    if (estimatedSegments > maxSegmentsBySize)
+    {
+        estimatedSegments = maxSegmentsBySize;
+    }
+    if (estimatedSegments > HEAP_MAX_SEGMENTS)
+    {
+        estimatedSegments = HEAP_MAX_SEGMENTS;
+    }
+
+    int *segmentOffsets = (int *)malloc((estimatedSegments + 1) * sizeof(int));
+    if (segmentOffsets == NULL)
+    {
+        heapSortSequentialRange(arr, 0, n);
         return;
     }
-    int left = 2 * index + 1;
-    int right = left + 1;
-#ifdef _OPENMP
-    if (depth < HEAP_BUILD_PARALLEL_DEPTH)
-    {
-        if (left < n)
-        {
-            int child = left;
-            int childDepth = depth + 1;
-#pragma omp task shared(arr, n) firstprivate(child, childDepth)
-            buildMaxHeapRecursive(arr, n, child, childDepth);
-        }
-        if (right < n)
-        {
-            int child = right;
-            int childDepth = depth + 1;
-#pragma omp task shared(arr, n) firstprivate(child, childDepth)
-            buildMaxHeapRecursive(arr, n, child, childDepth);
-        }
-#pragma omp taskwait
-    }
-    else
-    {
-        if (left < n)
-        {
-            buildMaxHeapRecursive(arr, n, left, depth + 1);
-        }
-        if (right < n)
-        {
-            buildMaxHeapRecursive(arr, n, right, depth + 1);
-        }
-    }
-#else
-    if (left < n)
-    {
-        buildMaxHeapRecursive(arr, n, left, depth + 1);
-    }
-    if (right < n)
-    {
-        buildMaxHeapRecursive(arr, n, right, depth + 1);
-    }
-#endif
-    heapify(arr, n, index);
-}
 
-static void heapify(int arr[], int n, int i)
-{
-    int largest = i;
-    int left = 2 * i + 1;
-    int right = left + 1;
-    if (left < n && arr[left] > arr[largest])
+    int chunkSize = (n + estimatedSegments - 1) / estimatedSegments;
+    int actualSegments = 0;
+    int start = 0;
+    while (start < n && actualSegments < estimatedSegments)
     {
-        largest = left;
+        segmentOffsets[actualSegments++] = start;
+        start += chunkSize;
     }
-    if (right < n && arr[right] > arr[largest])
+    segmentOffsets[actualSegments] = n;
+    estimatedSegments = actualSegments;
+
+#ifdef _OPENMP
+#pragma omp parallel for schedule(dynamic)
+#endif
+    for (int i = 0; i < estimatedSegments; ++i)
     {
-        largest = right;
+        int segStart = segmentOffsets[i];
+        int segLength = segmentOffsets[i + 1] - segmentOffsets[i];
+        heapSortSequentialRange(arr, segStart, segLength);
     }
-    if (largest != i)
+
+    if (estimatedSegments == 1)
     {
-        int temp = arr[i];
-        arr[i] = arr[largest];
-        arr[largest] = temp;
-        heapify(arr, n, largest);
+        free(segmentOffsets);
+        return;
     }
+
+    int *temp = (int *)malloc((size_t)n * sizeof(int));
+    if (temp == NULL)
+    {
+        heapSortSequentialRange(arr, 0, n);
+        free(segmentOffsets);
+        return;
+    }
+
+    parallelMergeSegments(arr, temp, segmentOffsets, estimatedSegments);
+
+    free(temp);
+    free(segmentOffsets);
 }
 static PartitionBounds partitionThreeWay(int arr[], int low, int high)
 {

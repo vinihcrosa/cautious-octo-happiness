@@ -13,7 +13,7 @@ void printArray(int* array, int size);
 void fillArray(int* array, int size);
 void fillArrayWithRandom(int* array, int size);
 void freeArray(int* array);
-int* copyArray(int* array, int size);
+int* copyArray(const int* array, int size);
 
 int* createArray(int size)
 {
@@ -76,9 +76,17 @@ void freeArray(int* array)
   free(array);
 }
 
-int* copyArray(int* array, int size)
+int* copyArray(const int* array, int size)
 {
+  if (array == NULL || size <= 0)
+  {
+    return NULL;
+  }
   int* copy = createArray(size);
+  if (copy == NULL)
+  {
+    return NULL;
+  }
   for (int i = 0; i < size; i++)
   {
     copy[i] = array[i];

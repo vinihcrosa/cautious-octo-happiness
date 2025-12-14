@@ -6,6 +6,6 @@ void printArray(int* array, int size);
 void fillArray(int* array, int size);
 void fillArrayWithRandom(int* array, int size);
 void freeArray(int* array);
-int* copyArray(int* array, int size);
+int* copyArray(const int* array, int size);
 
 #endif /* UTILS */
